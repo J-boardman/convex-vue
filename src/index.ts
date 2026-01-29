@@ -3,6 +3,7 @@ export { useConvexHttpClient } from './composables/useConvexHttpClient'
 
 export { useConvexHttpQuery } from './composables/useConvexHttpQuery'
 export { useConvexMutation } from './composables/useConvexMutation'
+export { useConvexPaginatedQuery } from './composables/useConvexPaginatedQuery'
 export { useConvexQuery } from './composables/useConvexQuery'
 
 export * from './plugin'
