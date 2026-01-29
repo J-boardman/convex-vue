@@ -81,9 +81,9 @@ export function useConvexPaginatedQuery<Query extends PaginatedQueryReference>(
   args: MaybeRefOrGetter<PaginatedQueryArgs<Query> | 'skip'>,
   options: UseConvexPaginatedQueryOptions,
 ): UseConvexPaginatedQueryReturn<PaginatedQueryItem<Query>> {
-  if (!options || typeof options.initialNumItems !== 'number' || options.initialNumItems < 0) {
+  if (!options || typeof options.initialNumItems !== 'number' || !Number.isFinite(options.initialNumItems) || options.initialNumItems < 0) {
     const received = options?.initialNumItems ?? options
-    throw new Error(`\`options.initialNumItems\` must be a positive number. Received \`${received}\`.`)
+    throw new Error(`\`options.initialNumItems\` must be a non-negative number. Received \`${received}\`.`)
   }
 
   const isServer = typeof window === 'undefined'
@@ -151,16 +151,21 @@ export function useConvexPaginatedQuery<Query extends PaginatedQueryReference>(
     // Clean up previous subscription
     unsubscribe?.()
 
+    // Skip subscription if args is "skip"
+    if (newArgs === 'skip') {
+      // Set terminal state when skipping
+      results.value = []
+      status.value = 'Exhausted'
+      currentLoadMore = null
+      error.value = null
+      return
+    }
+
     // Reset state for new query
     results.value = []
     status.value = 'LoadingFirstPage'
     currentLoadMore = null
     error.value = null
-
-    // Skip subscription if args is "skip"
-    if (newArgs === 'skip') {
-      return
-    }
 
     // Create new subscription
     const subscription = createSubscription(newArgs)
