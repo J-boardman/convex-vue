@@ -1,37 +1,16 @@
 <script setup lang="ts">
-import type { Id } from '../../convex/_generated/dataModel'
-import { useConvexMutation, useConvexQuery } from 'convex-vue'
-
-import { ref } from 'vue'
+import { useConvexMutation, useConvexPaginatedQuery } from 'convex-vue'
+import { computed, ref } from 'vue'
 import { api } from '../../convex/_generated/api'
 import TaskListItem from './TaskListItem.vue'
 
-const props = defineProps<{
-  isSync?: boolean
-}>()
-const { data, error, isPending, suspense } = useConvexQuery(api.tasks.get, {})
-
-if (props.isSync) {
-  await suspense()
-}
+const { results, status, isPending, loadMore, error } = useConvexPaginatedQuery(
+  api.tasks.listPaginated,
+  {},
+  { initialNumItems: 5 },
+)
 const newTask = ref('')
-const { isPending: isNewTaskLoading, mutate: addTask } = useConvexMutation(api.tasks.add, {
-  optimisticUpdate(ctx, { text }) {
-    const current = ctx.getQuery(api.tasks.get, {})
-    if (!current)
-      return
-
-    ctx.setQuery(api.tasks.get, {}, [
-      ...current,
-      {
-        _creationTime: Date.now(),
-        _id: 'optimistic_id' as Id<'tasks'>,
-        isCompleted: false,
-        text,
-      },
-    ])
-  },
-})
+const { isPending: isNewTaskLoading, mutate: addTask } = useConvexMutation(api.tasks.add)
 
 function handleNewTask() {
   if (newTask.value.trim() === '') {
@@ -40,12 +19,19 @@ function handleNewTask() {
   addTask({ text: newTask.value })
   newTask.value = ''
 }
+
+function handleLoadMore() {
+  loadMore(5)
+}
+
+const canLoadMore = computed(() => status.value === 'CanLoadMore')
+const isLoadingMore = computed(() => status.value === 'LoadingMore')
 </script>
 
 <template>
   <div class="task-list-container">
     <div class="header-section">
-      <h1>Tasks</h1>
+      <h1>Paginated Tasks</h1>
       <form @submit.prevent="handleNewTask">
         <input
           v-model="newTask"
@@ -55,14 +41,12 @@ function handleNewTask() {
         >
         <button
           type="submit"
+          :disabled="isNewTaskLoading"
         >
           <span v-if="isNewTaskLoading">Saving..</span>
           <span v-else>Save</span>
         </button>
       </form>
-      <p v-if="isPending">
-        Loading...
-      </p>
       <p
         v-if="error"
         class="error"
@@ -71,17 +55,30 @@ function handleNewTask() {
       </p>
     </div>
     <div class="list-section">
-      <ul v-if="data">
-        <li v-if="data.length === 0">
+      <ul v-if="results">
+        <li v-if="results.length === 0 && !isPending">
           No tasks found.
         </li>
         <TaskListItem
-          v-for="task in data"
+          v-for="task in results"
           :key="task._id"
           :task="task"
-          :is-pending="isPending"
         />
       </ul>
+      <div class="load-more">
+        <button
+          v-if="canLoadMore"
+          type="button"
+          :disabled="isLoadingMore"
+          @click="handleLoadMore"
+        >
+          <span v-if="isLoadingMore">Loading more...</span>
+          <span v-else>Load More</span>
+        </button>
+        <p v-else-if="status === 'Exhausted'">
+          All tasks loaded.
+        </p>
+      </div>
     </div>
   </div>
 </template>
@@ -105,18 +102,18 @@ h1 {
   color: #1a1a1a;
 }
 
-p {
-  margin: 0.5rem 0;
-  color: #666;
+.status {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background-color: #f5f5f5;
+  border-radius: 6px;
   font-size: 0.9rem;
+  color: #666;
 }
 
-input[type='number'] {
-  width: 80px;
-  padding: 0.4rem 0.5rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 0.9rem;
+.status strong {
+  color: #333;
+  font-weight: 600;
 }
 
 form {
@@ -160,9 +157,20 @@ form button:disabled {
   cursor: not-allowed;
 }
 
+.error {
+  color: #d32f2f;
+  background-color: #ffebee;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+}
+
 .list-section {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   margin-top: 1rem;
 }
@@ -176,12 +184,36 @@ ul {
   overflow: hidden;
 }
 
-.error {
-  color: #d32f2f;
-  background-color: #ffebee;
-  padding: 0.75rem 1rem;
+.load-more {
+  flex-shrink: 0;
+  text-align: center;
+  padding: 1rem 0 0.5rem 0;
+}
+
+.load-more button {
+  padding: 0.6rem 1.5rem;
+  background-color: #4a90e2;
+  color: white;
+  border: none;
   border-radius: 6px;
-  margin: 0.5rem 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.load-more button:hover:not(:disabled) {
+  background-color: #357abd;
+}
+
+.load-more button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.load-more p {
+  color: #999;
   font-size: 0.9rem;
+  margin: 0;
 }
 </style>
